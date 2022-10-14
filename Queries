@@ -1,0 +1,497 @@
+1.	SELECT * FROM mechanic;
+	Ответ: 26 строки, 5 столбцов.(!)
+
+2.	SELECT gnz,ser$reg_certif,num$reg_certif,date$reg_certif FROM vehicle;
+	Ответ: 161 строка, 4 столбца.
+
+3.	SELECT DISTINCT gnz FROM maintenance;
+	Ответ: 159 строк (без дубликатов), 1 столбец.
+
+4.	SELECT gnz as "Государственный номерной знак",
+	ser$reg_certif || ' ' || num$reg_certif || ' ' || date$reg_certif 
+	AS "Свидетельство о регистрации транспортного средства" 
+	FROM vehicle;
+	Ответ:  161 строка,  2 столбца.
+
+5.	SELECT factory_name,legal_addr,phone 
+	FROM factory 
+	ORDER BY factory_name ASC;
+	Ответ: 22 строки, 3 столбца.
+
+6.	SELECT id_tg || ': ' || name || ' - ' || note 
+	AS "Группы транспортных средств" 
+	FROM transpgroup;
+	Ответ: 14 строк, 1 столбец.
+
+7.	SELECT gnz, cost, cost * 0.20 AS tax FROM vehicle;
+	Ответ: 161 строка, 3 столбца. 
+
+8.	SELECT SUM(cost)::money AS total_cost FROM vehicle;
+	Ответ: 368 750 290.00.
+	
+9.	SELECT sname_initials || ', ' || TO_CHAR("born",'DD.MM.YYYY') 
+	AS "Лучшие механики предприятия" 
+	FROM mechanic LIMIT 5;
+	Ответ: 5 строк, 1 столбец.
+
+10.	SELECT sname_initials,TO_CHAR("born",'DD.MM.YYYY'),DATE_TRUNC('YEAR',AGE(current_date,born)) 
+	AS age
+	FROM mechanic;
+	Ответ: 26 строки, 3 столбца(!)
+	
+11.	SELECT gnz || ' - ' || ROUND(CAST(cost/run::float8 as numeric), 3)
+	AS "<государственный номерной знак>-<значение отношения стоимости к пробегу> руб/км"
+	FROM vehicle;
+	Ответ: 161 строка, 1 столбец.
+	
+12.	SELECT gnz,DATE(date_work),date_work::time AS time
+	FROM maintenance;
+	Ответ: 640 строк, 3 столбца.(!)
+
+13.	SELECT gnz,date_use,
+	cost-EXTRACT(years FROM DATE_TRUNC('YEAR',AGE(current_date,date_use)))*cost*0.07 AS "amort_cost" 
+	FROM vehicle;
+	Ответ: 161 строка, 3 столбца.
+
+14.	SELECT gnz || ' ' || TO_CHAR(date_made,'DAY') || ' ' || DATE_PART('DOY',date_made)
+	AS "День недели и день года выпуска"
+	FROM vehicle; 
+	Ответ: 161 строка, 1 столбец.
+
+15.	SELECT factory_name, legal_addr, phone FROM factory WHERE legal_addr = post_addr AND post_addr LIKE '%Россия%';
+	Ответ: 2 строк, 3 столбца.
+
+16.	SELECT *
+	FROM(SELECT sname_initials, certif_date, work_in_date, EXTRACT(years FROM DATE_TRUNC('YEAR',AGE(current_date,certif_date))) AS experience_years
+	FROM mechanic) AS cert_table
+	WHERE experience_years >= 13
+	ORDER BY experience_years ASC;
+	Ответ: 15 строк (для запроса в 2022 году), 4 столбца.
+
+17.	SELECT gnz, cost * 0.20 AS tax, date_use FROM vehicle
+	WHERE cost * 0.20 > 600000
+	ORDER BY cost * 0.20;
+	Ответ: 32 строки, 3 столбца. 
+
+18.	SELECT gnz,ser$reg_certif,num$reg_certif,date$reg_certif
+	FROM vehicle
+	WHERE TRIM(gnz) SIMILAR TO '%57|157|757';
+	Ответ: 146 строк, 4 столбца.
+
+19.	SELECT * 
+	FROM(SELECT gnz,date_work,TO_CHAR(date_work,'DAY') AS week_day,tech_cond_resume FROM maintenance) AS weekend_work
+	WHERE TRIM(week_day) = ANY(ARRAY['SATURDAY','SUNDAY']);
+	Ответ: 183 строки, 4 столбца. 96 работ проведено в воскресенье, остальные – в субботу.(!)
+
+20.	SELECT * 
+	FROM(SELECT gnz,date_work,TO_CHAR(date_work,'DAY') AS week_day,tech_cond_resume FROM maintenance) AS weekend_work
+	WHERE TRIM(TRAILING FROM week_day) = ANY(ARRAY['SATURDAY','SUNDAY'])
+	AND COALESCE(tech_cond_resume,'') = '';
+	Ответ: 7 строк, 4 столбца.
+
+21.	SELECT model_name
+	FROM model
+	WHERE model_name LIKE '%-____'
+	AND st_id = 1;
+	Ответ: 21 строка, 1 столбец.
+
+22.	SELECT sname_initials 
+	FROM mechanic
+	WHERE TRIM(sname_initials) SIMILAR TO '(Г|Ч|А)%';
+	Ответ: 4 строки (по одному на каждую букву "А" и "Ч", двое – на букву "Г"), 1 столбец.
+
+23. 	SELECT factory_name,post_addr,legal_addr,phone
+	FROM factory
+	WHERE factory_name || post_addr || legal_addr
+	LIKE '%\_%';
+	Ответ: 1 строки, 4 столбца. Предприятие "Bavarischen motorwerke ainth"
+
+24.	SELECT TO_CHAR(DATE(date_work),'DD.MM.YYYY') AS last_maintenance
+	FROM maintenance
+	WHERE TRIM(gnz) = 'c910ca57'
+	ORDER BY date_work DESC
+	LIMIT 1;
+	Ответ: 28.01.2019.
+
+25.	SELECT DISTINCT gnz
+	FROM maintenance
+	WHERE date_work BETWEEN '2018-01-01 00:00:00' AND '2018-12-31 23:59:59';
+	Ответ: 105 строк, 1 столбец.
+
+26.	SELECT s$diag_chart,n$diag_chart,date_work
+	FROM maintenance
+	WHERE s$diag_chart ~ '^[0-9][0-9][0-9][0-9]';
+	Ответ: 30 строк, 3 столбца.
+
+27.	SELECT s$diag_chart || n$diag_chart AS diag_chart
+	FROM maintenance
+	WHERE s$diag_chart SIMILAR TO '%ТО%'
+	AND date_work BETWEEN '2019-01-01 00:00:00' AND '2019-12-31 23:59:59';
+	Ответ: 96 строк, 1 столбец.
+
+28.	SELECT s$diag_chart,n$diag_chart,DATE(date_work) AS date,tech_cond_resume
+	FROM maintenance
+	WHERE DATE_TRUNC('day',date_work) = DATE_TRUNC('month',date_work) + INTERVAL'1 month - 1 day'
+	AND COALESCE(tech_cond_resume,'') != '';
+	Ответ: 19 строк, 4 столбца.
+
+29.	SELECT gnz,date_made,date_use,ser$reg_certif,num$reg_certif,date$reg_certif
+	FROM vehicle
+	WHERE TRIM(gnz) NOT SIMILAR TO '%57|157|757'
+	ORDER BY date_use;
+	Ответ: 15 строк, 6 столбцов.
+
+30.	SELECT gnz,ROW_NUMBER() OVER (ORDER BY gnz) AS numrow
+	FROM vehicle 
+	ORDER BY gnz;
+	Ответ: 161 строка, 2 столбца.
+
+31.	SELECT name AS "Производитель",factory_name AS "Завод"
+	FROM brand JOIN factory USING(idb)
+	ORDER BY name;
+	Ответ: 22 строки,  2 столбца.
+
+32.	SELECT gnz AS "Государственный номерной знак", 
+		COALESCE(brand.name,'') || ' ' || COALESCE(marka.name,'') || ' ' || COALESCE(model_name,'') AS "Автомобиль"
+	FROM vehicle
+		INNER JOIN brand USING(idb)
+		INNER JOIN marka USING(idm)
+		INNER JOIN model USING(idmo);
+	Ответ: 161 строка, 2 столбца.
+
+33.	SELECT gnz,factory_name,phone 
+	FROM vehicle
+		INNER JOIN factory USING(idf);	
+	Ответ: 161 строка, 3 столбца.
+
+34.	SELECT sname_initials,TO_CHAR(DATE(date_work),'DD.MM.YYYY') AS date_w
+	FROM maintenance
+		INNER JOIN mechanic USING(id_mech)
+	WHERE TRIM(gnz) = 'o009oo57'
+	ORDER BY date_work;
+
+35.	SELECT 
+		COALESCE(factory_name,'') || COALESCE(marka.name,'') || COALESCE(model_name,'') AS "Автомобиль",gnz
+	FROM vehicle
+		INNER JOIN state USING(st_id)
+		INNER JOIN factory USING(idf)
+		INNER JOIN marka USING(idm)
+		INNER JOIN model USING(idmo)
+	WHERE TRIM(state.name) = 'Япония';
+	Ответ: 22 строки, 2 столбца.
+	
+36.	BEGIN;
+	CREATE TEMP TABLE IF NOT EXISTS vehicle_copy ON COMMIT DROP AS TABLE vehicle;
+	SELECT DISTINCT
+		TO_CHAR(DATE(date_made),'DD.MM.YYYY') AS "Дата изготовления",
+		vehicle_copy.gnz AS old_gnz,
+		vehicle_copy.ser$reg_certif || ' ' || vehicle_copy.num$reg_certif || ' ' || vehicle_copy.date$reg_certif AS old_reg,
+		vehicle.gnz AS new_gnz, 
+		vehicle.ser$reg_certif || ' ' || vehicle.num$reg_certif || ' ' || vehicle.date$reg_certif AS new_reg
+	FROM vehicle
+		INNER JOIN vehicle_copy USING(date_made)
+	WHERE vehicle.gnz <> vehicle_copy.gnz AND vehicle_copy.date$reg_certif < vehicle.date$reg_certif;
+	COMMIT;
+	Ответ: один автомобиль (изготовлен 12 июля 2018 года).
+	
+37.	SELECT sname_initials,gnz,DATE(date_work)
+	FROM maintenance
+		LEFT OUTER JOIN mechanic USING(id_mech);
+	Ответ: 640 строк, 3 столбца. Заказы не выполняли Калатошкин М.П. и Лискунов М.В.,Бекетов А.С., Савостьянова Н.М.(!)
+
+38.	SELECT brand.name,factory_name,DATE(date_work) AS date_w,tech_cond_resume
+	FROM maintenance 
+		INNER JOIN brand USING(idb)
+		INNER JOIN factory USING(idf)
+	WHERE TRIM(brand.name) = 'BMW'
+	AND s$diag_chart SIMILAR TO '%(Р|R0)%';
+
+39.	BEGIN;
+	CREATE TEMP TABLE IF NOT EXISTS factory_copy ON COMMIT DROP AS TABLE factory;
+	SELECT DISTINCT
+		factory.factory_name,factory.post_addr,factory.legal_addr,factory.phone
+	FROM factory
+		INNER JOIN factory_copy USING(post_addr)
+	WHERE 
+		factory.factory_name SIMILAR TO '%ОАО АВТОВАЗ%';
+		AND factory.legal_addr <> factory_copy.legal_addr;
+	COMMIT;
+	
+40.	SELECT gnz,DATE(date_work),TO_CHAR(date_work::time,'HH:MI') AS time
+	FROM maintenance 
+	WHERE 
+	id_mech = (SELECT id_mech FROM maintenance WHERE gnz = 'o929ao57');
+	
+41.	SELECT gnz,brand.name, date_use
+	FROM vehicle
+		INNER JOIN brand USING(idb)
+	WHERE ser$reg_certif = (SELECT ser$reg_certif FROM vehicle WHERE gnz = 'c172ac57') AND 
+	vehicle.idb = (SELECT idb FROM vehicle WHERE gnz = 'c172ac57')
+	AND gnz <> 'c172ac57';
+
+42.	SELECT gnz FROM vehicle AS v WHERE NOT EXISTS(SELECT gnz FROM maintenance WHERE v.gnz = gnz);
+
+43.	SELECT gnz,cost FROM vehicle WHERE cost <= (SELECT AVG(cost) FROM vehicle);
+
+44.	SELECT gnz FROM vehicle WHERE TO_CHAR(date_use,'YY:MM') <> TO_CHAR(date$reg_certif,'YY:MM');
+
+45.	SELECT gnz,factory_name,post_addr,phone
+	FROM vehicle
+		INNER JOIN factory USING(idf) AS f_v
+	WHERE 
+		factory_name = (SELECT factory_name FROM vehicle INNER JOIN factory USING(idf) WHERE gnz = 'x027kp57')
+		AND gnz <> 'x027kp57';
+		
+46.	SELECT DISTINCT brand.name, (SELECT name FROM state WHERE brand.st_id = st_id) 
+        FROM factory
+                INNER JOIN brand USING(idb)
+        WHERE 
+        	idb NOT IN (SELECT idb FROM factory WHERE factory.legal_addr SIMILAR TO '%Россия%');
+
+
+47.	SELECT brand.name AS "Бренд", factory.factory_name, factory.legal_addr
+	FROM factory
+		INNER JOIN brand USING(idb)
+	WHERE 
+		idb = ANY
+		(SELECT idb FROM factory WHERE factory.legal_addr SIMILAR TO '%Россия%')
+		AND idb = ANY
+		(SELECT idb FROM factory WHERE factory.legal_addr NOT SIMILAR TO '%Россия%');
+	
+48.	SELECT gnz,brand.name || ',' || marka.name || ',' || model_name AS info, 
+	       (SELECT date_made FROM vehicle WHERE vehicle.gnz = maintenance.gnz),
+	       factory.factory_name,factory.post_addr,date_work, 
+	       s$diag_chart || ' ' || n$diag_chart AS diag_chart, tech_cond_resume
+	FROM maintenance 
+		INNER JOIN brand USING(idb)
+		INNER JOIN factory USING(idf)
+		INNER JOIN marka USING(idm)
+		INNER JOIN model USING(idmo)
+	WHERE gnz = 'a723ak57' AND DATE(date_work) = '2018-11-6';
+	
+49.	SELECT 
+		(SELECT COUNT(*) AS "Технических обслуживаний" FROM maintenance WHERE s$diag_chart NOT SIMILAR TO '%Р%' 
+			AND TRIM(s$diag_chart) !~ '^[0-9][0-9][0-9][0-9]'
+			AND s$diag_chart NOT SIMILAR TO '%R0%'),
+		(SELECT COUNT(*) AS "Ремонтов" FROM maintenance WHERE s$diag_chart SIMILAR TO '%Р%'
+			OR tech_cond_resume SIMILAR TO '%Ремонт%'
+			OR tech_cond_resume SIMILAR TO '%ремонт%'
+			OR s$diag_chart SIMILAR TO '%R0%'),
+		(SELECT COUNT(*) AS "Предпродажных подготовок" FROM maintenance WHERE TRIM(s$diag_chart) ~ '^[0-9][0-9][0-9][0-9]'
+			AND tech_cond_resume NOT SIMILAR TO '%ТО%'
+			AND tech_cond_resume NOT SIMILAR TO '%Ремонт капитальный%');
+			
+50.	SELECT sname_initials
+	FROM mechanic 
+	WHERE 
+		id_mech = 
+		ANY(SELECT DISTINCT id_mech 
+		FROM (SELECT DATE(date_work) AS date, id_mech FROM maintenance) AS ou
+		WHERE (SELECT COUNT(*) 
+			FROM 
+			(SELECT DATE(date_work) AS date, id_mech FROM maintenance) AS iu
+			WHERE iu.date = ou.date AND iu.id_mech = ou.id_mech) > 1);
+
+51.	SELECT gnz,date_made,run 
+	FROM vehicle
+		INNER JOIN state USING(st_id)
+	WHERE 
+		(EXTRACT(years FROM DATE_TRUNC('YEAR',AGE(date_made))) >= 30 AND TRIM(state.name) = 'Российская Федерация') OR
+		(EXTRACT(years FROM DATE_TRUNC('YEAR',AGE(date_made))) >= 25 AND TRIM(state.name) <> 'Российская Федерация') OR
+		(run >= 500000) AND 
+		gnz <> 'c945op57';
+
+52.	SELECT DISTINCT gnz 
+	FROM maintenance AS m
+	WHERE 
+		TRIM(TO_CHAR(date_work,'DAY')) = 'FRIDAY' AND
+		NOT EXISTS (SELECT * FROM maintenance WHERE TRIM(TO_CHAR(date_work,'DAY')) <> 'FRIDAY' AND m.gnz = gnz);
+
+53.	SELECT DISTINCT gnz
+	FROM (SELECT * FROM maintenance INNER JOIN mechanic USING(id_mech)) AS maint_mech
+	WHERE EXISTS(SELECT gnz FROM maintenance INNER JOIN mechanic USING(id_mech) 
+			WHERE (s$diag_chart SIMILAR TO '%ТО%' OR tech_cond_resume SIMILAR TO '%ТО%') 
+			AND TRIM(sname_initials) = 'Баженов М.К.' 
+			AND maint_mech.gnz = gnz) 
+	AND EXISTS(SELECT gnz FROM maintenance INNER JOIN mechanic USING(id_mech) 
+			WHERE (s$diag_chart SIMILAR TO '%Р%'
+			OR tech_cond_resume SIMILAR TO '%Ремонт%'
+			OR tech_cond_resume SIMILAR TO '%ремонт%'
+			OR s$diag_chart SIMILAR TO '%R0%') 
+			AND TRIM(sname_initials) = 'Савостьянов А.В.' 
+			AND maint_mech.gnz = gnz);
+
+54.	SELECT DISTINCT sname_initials
+	FROM maintenance 
+		INNER JOIN mechanic USING(id_mech)
+	WHERE id_mech = ANY(SELECT id_mech 
+		FROM 
+			(SELECT DISTINCT id_mech,TO_CHAR(date_work,'MONTH') 
+			FROM maintenance 
+			WHERE EXTRACT(YEAR FROM date_work) = '2018') AS ou
+		WHERE 
+			(SELECT COUNT(id_mech) 
+			FROM 
+				(SELECT DISTINCT id_mech,TO_CHAR(date_work,'MONTH') 
+				FROM maintenance 
+				WHERE EXTRACT(YEAR FROM date_work) = '2018') AS iu
+			WHERE ou.id_mech = iu.id_mech) = 12);
+
+55.	SELECT DISTINCT gnz,date_work,tech_cond_resume
+	FROM maintenance
+	WHERE gnz = ANY(SELECT gnz
+		FROM 
+			(SELECT DISTINCT gnz
+			FROM maintenance AS m
+			WHERE EXTRACT(YEAR FROM date_work) = '2018'
+			AND NOT EXISTS(SELECT gnz FROM maintenance WHERE EXTRACT(YEAR FROM date_work) <> '2018' AND m.gnz = gnz))AS res); 
+				
+56. 	BEGIN;
+	CREATE TEMP TABLE IF NOT EXISTS february_dates ON COMMIT DROP AS 
+		(SELECT DATE(generate_series)
+		FROM generate_series('2018-02-01'::timestamp,'2018-02-28 00:00:00'::timestamp,'1 DAY'::interval));
+	SELECT *
+	FROM february_dates
+	WHERE NOT EXISTS
+		(SELECT DATE(date_work) 
+		FROM maintenance
+		WHERE DATE(date_work) BETWEEN '2018-02-01' AND '2018-02-28' 
+		AND 	
+			february_dates.date = DATE(date_work));
+	COMMIT;
+				
+			
+57.	SELECT COUNT(*) 
+	FROM maintenance 
+	WHERE DATE(date_work) BETWEEN '2017-01-01' AND '2017-12-31';
+
+58.	SELECT TRUNC(SUM(cost)*0.18) || ' руб. ' || TRUNC(((SUM(cost)*0.18) - TRUNC(SUM(cost)*0.18))*100) || ' коп.' AS nds 
+	FROM vehicle 
+	WHERE date$reg_certif BETWEEN '2016-01-01' AND '2016-12-31';
+
+59.	SELECT COUNT(*)
+	FROM vehicle
+	WHERE TRIM(gnz) SIMILAR TO '%57|157|757';
+	
+60.	SELECT ROUND(CAST(AVG(EXTRACT(years FROM DATE_TRUNC('YEAR',AGE(born)))) AS numeric),2)
+	FROM mechanic; 
+
+61.	SELECT
+		SUM(cost)::numeric(15,2) AS total_cost, 
+		AVG(cost)::numeric(15,2) AS average_cost,
+		SUM(run)::numeric(15,1) AS total_run,
+		AVG(run)::numeric(15,1) AS average_run
+	FROM
+		vehicle; (!)
+		
+62.	SELECT name,AVG(run)::numeric(15,2)
+	FROM 
+		vehicle
+		INNER JOIN brand USING(idb)
+	GROUP BY (name);
+	
+63.	SELECT brand.name,marka.name,AVG(cost)::numeric(15,2)
+	FROM 
+		vehicle
+		INNER JOIN brand USING(idb)
+		INNER JOIN marka USING(idm)
+	GROUP BY(brand.name,marka.name);
+		
+64.	SELECT 
+		COALESCE(marka.name,model.model_name) AS auto, 
+		ROUND(CAST(AVG(EXTRACT(years FROM DATE_TRUNC('YEAR',AGE(date_made)))) AS numeric),2) AS age
+	FROM 
+		vehicle
+		INNER JOIN brand USING(idb)
+		INNER JOIN marka USING(idm)
+		INNER JOIN model USING(idmo)
+	GROUP BY(auto);
+		
+65.	BEGIN;
+	CREATE TEMP TABLE IF NOT EXISTS year_work_table ON COMMIT DROP AS 
+		(SELECT 
+			COUNT(*) AS num_work_days,
+			EXTRACT(year FROM date_work) as year 
+		FROM 
+			maintenance 
+		GROUP BY (year));
+	SELECT year
+	FROM year_work_table
+	WHERE num_work_days = (SELECT MAX(num_work_days) FROM year_work_table);
+	COMMIT;
+
+66.	BEGIN;
+	CREATE TEMP TABLE IF NOT EXISTS mark_num ON COMMIT DROP AS 
+		(SELECT marka.name,COUNT (*) AS num
+		FROM vehicle 
+			INNER JOIN marka USING(idm)
+		GROUP BY(marka.name));
+	
+	SELECT * 
+	FROM mark_num
+	WHERE num>=8
+	AND TRIM(name) <> '';
+	COMMIT;
+	
+67.	BEGIN;
+	CREATE TEMP TABLE IF NOT EXISTS gnz_num ON COMMIT DROP AS 
+		(SELECT	gnz,COUNT (*) AS num
+		FROM maintenance
+		GROUP BY(gnz));
+	SELECT gnz
+	FROM gnz_num
+	WHERE num = 1;
+	COMMIT;
+	
+68.	SELECT gnz,state.name,factory.factory_name,factory.legal_addr,factory.phone
+	FROM
+		vehicle 
+		INNER JOIN state USING (st_id)
+		INNER JOIN factory USING (idf)
+	WHERE 
+		TRIM(euro_union) = '1';
+	
+		
+69.	SELECT gnz,DATE(date_work) AS date,sname_initials
+	FROM 
+		maintenance
+		INNER JOIN mechanic USING(id_mech)
+	WHERE 
+		TRIM(s$diag_chart) ~ '^[0-9][0-9][0-9][0-9]'
+		AND tech_cond_resume NOT SIMILAR TO '%ТО%'
+		AND tech_cond_resume NOT SIMILAR TO '%Ремонт капитальный%';
+		
+70.	BEGIN;
+	CREATE TEMP TABLE IF NOT EXISTS cost_brand ON COMMIT DROP AS 
+		(SELECT brand.name,SUM(cost) AS cost
+		FROM
+			vehicle
+			INNER JOIN brand USING(idb)
+		GROUP BY(brand.name));
+	SELECT name
+	FROM cost_brand 
+	WHERE cost = (SELECT MAX(cost) FROM cost_brand);
+	COMMIT;
+	
+	
+	
+	
+
+			
+
+		
+		
+		
+		
+	
+
+
+
+		
+
+
+	
+
+
+
+	
