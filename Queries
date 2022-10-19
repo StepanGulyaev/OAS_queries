@@ -203,8 +203,11 @@
 	FROM maintenance 
 		INNER JOIN brand USING(idb)
 		INNER JOIN factory USING(idf)
+		INNER JOIN maintenancetype USING(mt_id)
 	WHERE TRIM(brand.name) = 'BMW'
-	AND s$diag_chart SIMILAR TO '%(Р|R0)%';
+	AND  maintenancetype.name SIMILAR TO '%Ремонт%';
+	
+	(!)
 
 39.	BEGIN;
 	CREATE TEMP TABLE IF NOT EXISTS factory_copy ON COMMIT DROP AS TABLE factory;
@@ -270,16 +273,20 @@
 	WHERE gnz = 'a723ak57' AND DATE(date_work) = '2018-11-6';
 	
 49.	SELECT 
-		(SELECT COUNT(*) AS "Технических обслуживаний" FROM maintenance WHERE s$diag_chart NOT SIMILAR TO '%Р%' 
-			AND TRIM(s$diag_chart) !~ '^[0-9][0-9][0-9][0-9]'
-			AND s$diag_chart NOT SIMILAR TO '%R0%'),
-		(SELECT COUNT(*) AS "Ремонтов" FROM maintenance WHERE s$diag_chart SIMILAR TO '%Р%'
-			OR tech_cond_resume SIMILAR TO '%Ремонт%'
-			OR tech_cond_resume SIMILAR TO '%ремонт%'
-			OR s$diag_chart SIMILAR TO '%R0%'),
-		(SELECT COUNT(*) AS "Предпродажных подготовок" FROM maintenance WHERE TRIM(s$diag_chart) ~ '^[0-9][0-9][0-9][0-9]'
-			AND tech_cond_resume NOT SIMILAR TO '%ТО%'
-			AND tech_cond_resume NOT SIMILAR TO '%Ремонт капитальный%');
+		(SELECT COUNT(*) AS "Технических обслуживаний" 
+		FROM maintenance 
+			INNER JOIN maintenancetype USING(mt_id) 
+		WHERE maintenancetype.name SIMILAR TO '%ТО%'),
+		(SELECT COUNT(*) AS "Ремонтов" 
+		FROM maintenance 
+			INNER JOIN maintenancetype USING(mt_id) 
+		WHERE maintenancetype.name SIMILAR TO '%Ремонт%'),
+		(SELECT COUNT(*) AS "Предпродажных подготовок" 
+		FROM maintenance 
+			INNER JOIN maintenancetype USING(mt_id) 
+		WHERE maintenancetype.name SIMILAR TO '%Предпродажная подготовка%');
+		
+(!)
 			
 50.	SELECT sname_initials
 	FROM mechanic 
@@ -309,15 +316,16 @@
 
 53.	SELECT DISTINCT gnz
 	FROM (SELECT * FROM maintenance INNER JOIN mechanic USING(id_mech)) AS maint_mech
-	WHERE EXISTS(SELECT gnz FROM maintenance INNER JOIN mechanic USING(id_mech) 
-			WHERE (s$diag_chart SIMILAR TO '%ТО%' OR tech_cond_resume SIMILAR TO '%ТО%') 
+	WHERE EXISTS(SELECT gnz FROM maintenance 
+				INNER JOIN mechanic USING(id_mech)
+				INNER JOIN maintenancetype USING(mt_id) 
+			WHERE maintenancetype.name SIMILAR TO '%ТО%'
 			AND TRIM(sname_initials) = 'Баженов М.К.' 
 			AND maint_mech.gnz = gnz) 
-	AND EXISTS(SELECT gnz FROM maintenance INNER JOIN mechanic USING(id_mech) 
-			WHERE (s$diag_chart SIMILAR TO '%Р%'
-			OR tech_cond_resume SIMILAR TO '%Ремонт%'
-			OR tech_cond_resume SIMILAR TO '%ремонт%'
-			OR s$diag_chart SIMILAR TO '%R0%') 
+	AND EXISTS(SELECT gnz FROM maintenance 
+				INNER JOIN mechanic USING(id_mech) 
+				INNER JOIN maintenancetype USING(mt_id) 
+			WHERE maintenancetype.name SIMILAR TO '%Ремонт%'
 			AND TRIM(sname_initials) = 'Савостьянов А.В.' 
 			AND maint_mech.gnz = gnz);
 
@@ -453,13 +461,11 @@
 	
 		
 69.	SELECT gnz,DATE(date_work) AS date,sname_initials
-	FROM 
-		maintenance
+	FROM maintenance
 		INNER JOIN mechanic USING(id_mech)
+		INNER JOIN maintenancetype USING (mt_id)
 	WHERE 
-		TRIM(s$diag_chart) ~ '^[0-9][0-9][0-9][0-9]'
-		AND tech_cond_resume NOT SIMILAR TO '%ТО%'
-		AND tech_cond_resume NOT SIMILAR TO '%Ремонт капитальный%';
+		maintenancetype.name SIMILAR TO '%Предпродажная подготовка%';
 		
 70.	BEGIN;
 	CREATE TEMP TABLE IF NOT EXISTS cost_brand ON COMMIT DROP AS 
@@ -473,25 +479,180 @@
 	WHERE cost = (SELECT MAX(cost) FROM cost_brand);
 	COMMIT;
 	
+
+71. 	SELECT num_of_bus
+	FROM 
+		(SELECT sname_initials,COUNT(*) AS num_of_bus
+			FROM maintenance
+				INNER JOIN transpgroup USING(id_tg)
+				INNER JOIN mechanic USING(id_mech)
+			WHERE TRIM(transpgroup.name) = 'Автобусы'
+			GROUP BY(sname_initials)) AS mech_bus
+	WHERE sname_initials = 'Кротов К.О.';
+	
+	
+72.	SELECT  
+		gnz || ' ' || COALESCE(brand.name,'') 
+		|| ' ' || 
+		COALESCE(marka.name,'') || ' ' || COALESCE(model_name,'')
+		|| ' ' || 
+		'Свидетельство о регистрации: ' || ser$reg_certif || '№' || num$reg_certif
+		|| ' ' || 
+		'выдано: ' || date$reg_certif
+	FROM vehicle 
+		INNER JOIN brand USING(idb)
+		INNER JOIN marka USING(idm)
+		INNER JOIN model USING(idmo)
+	WHERE ABS(DATE_PART('day',AGE(date$reg_certif,date_use))::integer) > 14;
+	
+	
+73.	SELECT *
+	FROM
+		(SELECT 
+			brand.name,
+			factory.factory_name,
+		CASE
+			WHEN TRIM(euro_union) = '1' AND factory.legal_addr SIMILAR TO '%Россия%' THEN factory.post_addr
+			WHEN factory.legal_addr SIMILAR TO '%Россия%' THEN factory.legal_addr
+			ELSE ''
+		END AS post_o_legal_addr,
+		factory.phone
+		FROM factory 
+			INNER JOIN state USING(st_id)
+			INNER JOIN brand USING(idb)) AS res
+	WHERE post_o_legal_addr <> '';
+		
+	
+74.	BEGIN;
+	CREATE TEMP TABLE IF NOT EXISTS brand_remont_2018 ON COMMIT DROP AS 
+		(SELECT brand.name,COUNT(*) AS num_rem
+		FROM maintenance
+			INNER JOIN brand USING(idb)
+			INNER JOIN maintenancetype USING (mt_id)
+		WHERE 
+			TRIM(maintenancetype.name) = 'Ремонт'
+		AND 
+			EXTRACT(YEAR FROM date_work) = '2018'
+		GROUP BY(brand.name));
+	SELECT name
+	FROM brand_remont_2018 
+	WHERE num_rem = (SELECT MIN(num_rem) FROM brand_remont_2018);
+	COMMIT;
+	
+75.	BEGIN;
+	CREATE TEMP TABLE IF NOT EXISTS mech_work ON COMMIT DROP AS 
+		(SELECT sname_initials,COUNT(*) AS work_num
+		FROM maintenance 
+			INNER JOIN mechanic USING(id_mech)
+		GROUP BY(sname_initials));
+	SELECT sname_initials
+	FROM mech_work 
+	WHERE work_num > (SELECT work_num FROM mech_work WHERE sname_initials = 'Голубев Д.Н.');
+	COMMIT;
+	
+	(!)
+	
+76.	BEGIN;
+	CREATE TEMP TABLE IF NOT EXISTS vehicle_copy ON COMMIT DROP AS
+		(SELECT gnz,
+			COALESCE(brand.name,'') || ' ' || COALESCE(marka.name,'') || ' ' || COALESCE(model_name,'') AS bmm,
+			vehicle.date$reg_certif
+		FROM vehicle
+			INNER JOIN brand USING(idb)
+			INNER JOIN marka USING(idm)
+			INNER JOIN model USING (idmo));
+	
+	SELECT 
+		vehicle.gnz || ' ' || vehicle_copy.gnz,
+		vehicle.bmm || ' | ' || vehicle_copy.bmm,
+		date$reg_certif
+	FROM
+		(SELECT gnz,
+			COALESCE(brand.name,'') || ' ' || COALESCE(marka.name,'') || ' ' || COALESCE(model_name,'') AS bmm,
+			vehicle.date$reg_certif
+		FROM vehicle
+			INNER JOIN brand USING(idb)
+			INNER JOIN marka USING(idm)
+			INNER JOIN model USING (idmo)) AS vehicle
+		INNER JOIN vehicle_copy USING(date$reg_certif)
+	WHERE vehicle.gnz <> vehicle_copy.gnz;
+	COMMIT;
+	
+77.	SELECT gnz,ser$reg_certif,num$reg_certif,date$reg_certif,
+		CASE 
+		WHEN EXISTS
+				(SELECT gnz 
+				FROM maintenance WHERE vehicle.gnz = maintenance.gnz) 
+			THEN 
+				(SELECT COUNT(*) FROM maintenance WHERE vehicle.gnz = maintenance.gnz)
+		ELSE 0
+		END AS num_of_works
+	FROM vehicle
+	ORDER BY num_of_works;
+	
+78.	SELECT gnz 
+	 FROM vehicle
+	 WHERE 
+	 	(SELECT COUNT(*) FROM maintenance WHERE vehicle.gnz = maintenance.gnz) > 0
+	 	AND
+	 	(SELECT COUNT(*) FROM maintenance WHERE vehicle.gnz = maintenance.gnz 
+		AND 
+		(EXTRACT(YEAR FROM date_work) = '2016'
+		OR
+		EXTRACT(YEAR FROM date_work) = '2017'
+		OR
+		EXTRACT(YEAR FROM date_work) = '2018'))::float/
+		(SELECT COUNT(*) FROM maintenance WHERE vehicle.gnz = maintenance.gnz)::float >= 0.8;
+		
+79.	SELECT sname_initials 
+	FROM mechanic
+	WHERE 
+		(AGE(certif_date,born) >= '60 years' AND sname_initials SIMILAR TO '%ов %')
+		OR
+		(AGE(certif_date,born) >= '55 years' AND sname_initials SIMILAR TO '%ва %');
+		
+80.	SELECT 
+		gnz,
+		COALESCE(brand.name,'') || ',' || COALESCE(marka.name,'') || ',' || COALESCE(model_name,'') AS bmm,
+		ser$reg_certif || ' ' || ser$reg_certif || ' ' || TO_CHAR(date$reg_certif,'DD.MM.YYYY') AS reg,
+		TO_CHAR(DATE(date_work),'DD.MM.YYYY') AS date_w,
+		sname_initials,
+		tech_cond_resume
+	FROM maintenance
+		INNER JOIN brand USING(idb)
+		INNER JOIN marka USING(idm)
+		INNER JOIN model USING (idmo)
+		INNER JOIN vehicle USING (gnz)
+		INNER JOIN mechanic USING(id_mech);
+		
+81.	SELECT 
+		(((SELECT COUNT(*) 
+		FROM maintenance 
+			INNER JOIN mechanic USING(id_mech)
+		WHERE 
+			TRIM(sname_initials) = 'Савостьянов А.В.')::float/
+		(SELECT COUNT(*) 
+		FROM maintenance)::float)*100)::numeric(15,2)|| ' %' ;
+		
+	(!)
+	
+82.	SELECT 
+		gnz AS "Государственный номерной знак",
+		EXTRACT(years FROM DATE_TRUNC('YEAR',AGE(current_date,date_made))) AS "Возраст"
+		
+		
+	
+
+	
+
 	
 	
 	
 
+		
 			
-
-		
-		
-		
-		
-	
-
-
-
 		
 
 
 	
 
-
-
-	
