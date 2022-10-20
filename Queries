@@ -636,9 +636,57 @@
 		
 	(!)
 	
-82.	SELECT 
-		gnz AS "Государственный номерной знак",
-		EXTRACT(years FROM DATE_TRUNC('YEAR',AGE(current_date,date_made))) AS "Возраст"
+82.	SELECT *
+	FROM
+		(SELECT 
+			gnz AS "Государственный номерной знак",
+			EXTRACT(years FROM DATE_TRUNC('YEAR',AGE(current_date,date_made))) AS "Возраст",
+			run AS "Пробег",
+			CASE 
+			WHEN EXISTS
+				(SELECT gnz FROM maintenance WHERE vehicle.gnz = maintenance.gnz) 
+			THEN 
+				TO_CHAR((SELECT DATE(date_work) FROM maintenance WHERE vehicle.gnz = maintenance.gnz ORDER BY date_work DESC LIMIT 1),'DD.MM.YYYY') 
+			ELSE ' '
+			END AS "Дата последнего ремонта"
+		FROM vehicle) AS veh_table
+	WHERE
+		"Возраст" >= 3 OR
+		"Пробег" >= 100000 OR
+		"Дата последнего ремонта" <> ' ' OR
+		EXISTS
+			(SELECT * 
+			FROM vehicle
+				INNER JOIN transpgroup USING(id_tg)
+			WHERE 
+				(TRIM(transpgroup.name) = 'Специальные автомобили' OR
+				TRIM(transpgroup.name) = 'Специализированные автомобили' OR
+				TRIM(transpgroup.name) = 'Спортивные автомобили' OR
+				TRIM(transpgroup.name) = 'Спортивные мотоциклы') AND
+				gnz = "Государственный номерной знак");
+	(!)
+
+83.	SELECT 
+		gnz,
+		brand.name,
+		marka.name,
+		model_name,
+		transpgroup.name,
+		DATE(date_work) AS date_w,
+		tech_cond_resume,
+		sname_initials
+	FROM maintenance
+		INNER JOIN state USING(st_id)
+		INNER JOIN brand USING(idb)
+		INNER JOIN marka USING(idm)
+		INNER JOIN model USING (idmo)
+		INNER JOIN transpgroup USING(id_tg)
+		INNER JOIN mechanic USING(id_mech)
+		INNER JOIN maintenancetype USING(mt_id)
+	WHERE 
+		TRIM(state.name) = 'Япония' AND
+		maintenancetype.name NOT SIMILAR TO '%японских%' AND
+		maintenancetype.name SIMILAR TO 'ТО%';
 		
 		
 84.	SELECT gnz,time_period
