@@ -641,7 +641,37 @@
 		EXTRACT(years FROM DATE_TRUNC('YEAR',AGE(current_date,date_made))) AS "Возраст"
 		
 		
-	
+84.	SELECT gnz,time_period
+	FROM
+		(SELECT 
+			gnz,
+			gnz_date.date_work,
+			gnz_date_copy.date_work,
+			EXTRACT(EPOCH FROM(gnz_date.date_work - gnz_date_copy.date_work)) AS time_period
+		FROM (SELECT gnz,date_work FROM maintenance) AS gnz_date
+			INNER JOIN (SELECT gnz,date_work FROM maintenance) AS gnz_date_copy USING(gnz)) AS period_table
+	WHERE 
+	time_period = 
+		(SELECT MIN(time_period) 
+		FROM
+			(SELECT 
+			gnz,
+			gnz_date.date_work,
+			gnz_date_copy.date_work,
+			EXTRACT(EPOCH FROM(gnz_date.date_work - gnz_date_copy.date_work)) AS time_period
+				FROM (SELECT gnz,date_work FROM maintenance) AS gnz_date
+			INNER JOIN (SELECT gnz,date_work FROM maintenance) AS gnz_date_copy USING(gnz)) AS period_table
+		WHERE 
+			time_period > 0);
+			
+85.	SELECT maintenancetype.name,COUNT(*)
+	FROM maintenance 
+		INNER JOIN maintenancetype USING(mt_id)
+	WHERE mt_id::integer >= 3 AND mt_id::integer <= 18
+	GROUP BY(maintenancetype.name)
+	ORDER BY 
+		LENGTH(maintenancetype.name),
+		maintenancetype.name;
 
 	
 
