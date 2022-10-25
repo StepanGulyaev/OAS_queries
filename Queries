@@ -720,6 +720,272 @@
 	ORDER BY 
 		LENGTH(maintenancetype.name),
 		maintenancetype.name;
+		
+86.	
+
+ 	SELECT 
+		absolute_num,
+        "works on one reg vehicle",
+        absolute_num - LAG(absolute_num) OVER (ORDER BY absolute_num.year) AS increase_absolute,
+        lost_profit
+	FROM 
+		(SELECT EXTRACT(years FROM DATE_TRUNC('YEAR',date_work)) AS year, COUNT(*) AS absolute_num
+		FROM maintenance
+		GROUP BY (year)
+		ORDER BY(year)) AS absolute_num
+   	LEFT OUTER JOIN 
+        (SELECT year,
+        (num_reg_works::float/cars_reg::float)::numeric(15,2) AS "works on one reg vehicle"
+        FROM
+            (SELECT year,
+                FIRST_VALUE(cur_reg) OVER (PARTITION BY value_partition ORDER BY year) AS cars_reg,
+                num_reg_works
+            FROM
+                (SELECT *,
+                    SUM(CASE WHEN cur_reg IS NULL THEN 0 ELSE 1 END) OVER (ORDER BY year) as value_partition
+                FROM
+                    (SELECT 
+                        CASE WHEN  num_works_reg_cars.year IS NULL
+                        THEN num_reg_cars.year
+                        ELSE num_works_reg_cars.year
+                        END AS year,
+                        cur_reg, num_reg_works
+                    FROM
+                        (SELECT EXTRACT(years FROM DATE_TRUNC('YEAR',date_work)) AS year,COUNT(*) AS num_reg_works
+                        FROM 
+                            maintenance
+                        LEFT OUTER JOIN 
+                            (SELECT gnz,date$reg_certif FROM vehicle) as date_reg
+                        ON (maintenance.gnz = date_reg.gnz)
+                        LEFT OUTER JOIN 
+                            (SELECT DISTINCT ON (gnz) gnz, date_work AS sale_work
+                            FROM 
+                                (SELECT * FROM maintenance
+                                    INNER JOIN maintenancetype USING(mt_id)
+                                ORDER BY(date_work)) AS maint
+                            WHERE maint.name SIMILAR TO '%Предпродажная подготовка%') AS sale_works
+                        ON (maintenance.gnz = sale_works.gnz)
+                        WHERE date_work BETWEEN date$reg_certif AND sale_work
+                            OR sale_work IS NULL
+                        GROUP BY(year)
+                        ORDER BY (year)) AS num_works_reg_cars
+                    FULL OUTER JOIN 
+                        (SELECT 
+                            year,
+                            SUM(prirost) OVER (ORDER BY year) AS cur_reg
+                        FROM
+                            (SELECT 
+                            CASE WHEN year_reg IS NULL
+                                THEN year_unreg
+                            ELSE year_reg
+                            END AS year,
+                            num_reg,num_unreg,
+                            CASE 
+                                WHEN num_unreg IS NULL
+                                    THEN num_reg
+                                WHEN num_reg IS NULL
+                                    THEN -num_unreg
+                                ELSE num_reg - num_unreg
+                                END AS prirost
+                            FROM 
+                                (SELECT year_reg,
+                                num_reg
+                                FROM 
+                                    (SELECT 
+                                        EXTRACT(years FROM DATE_TRUNC('YEAR',date$reg_certif)) AS year_reg,
+                                        COUNT(*) AS num_reg 
+                                    FROM vehicle
+                                    GROUP BY(year_reg)
+                                    ORDER BY(year_reg)) AS res) AS reg_cars
+                            FULL OUTER JOIN
+                                (SELECT COUNT(*) AS num_unreg, year_unreg
+                                    FROM 
+                                    (SELECT DISTINCT ON (gnz) EXTRACT(years FROM DATE_TRUNC('YEAR',date_work)) AS year_unreg,gnz
+                                    FROM 
+                                        (SELECT * FROM maintenance
+                                            INNER JOIN maintenancetype USING(mt_id)
+                                        ORDER BY(date_work)) AS maint
+                                    WHERE maint.name SIMILAR TO '%Предпродажная подготовка%') AS sale_work
+                                GROUP BY(year_unreg)
+                                ORDER BY(year_unreg)) AS unreg_cars
+                            ON (unreg_cars.year_unreg = reg_cars.year_reg)) AS cur_reg) AS num_reg_cars
+                    ON (num_reg_cars.year = num_works_reg_cars.year)) AS res) AS res1) AS res2
+        WHERE num_reg_works > 0) AS works_on_reg_auto
+    ON (absolute_num.year = works_on_reg_auto.year)
+    LEFT OUTER JOIN 
+        (SELECT 
+            year,
+            CASE WHEN absolute_num >= cars_reg THEN 0 ::numeric(15,2) || ' %'
+            ELSE ((1-(absolute_num::float/cars_reg::float))*100)::numeric(15,2) || ' %'
+            END AS lost_profit
+        FROM
+            (SELECT 
+                    year,
+                    absolute_num,
+                    FIRST_VALUE(cur_reg) OVER (PARTITION BY value_partition ORDER BY year) AS cars_reg
+            FROM 
+                (SELECT 
+                    CASE WHEN work_year IS NULL
+                    THEN year
+                    WHEN year IS NULL
+                    THEN work_year
+                    ELSE work_year
+                    END AS year,
+                    absolute_num,
+                    cur_reg,
+                    SUM(CASE WHEN cur_reg IS NULL THEN 0 ELSE 1 END) OVER (ORDER BY year) as value_partition
+                FROM 
+                    (SELECT 
+                        absolute_num.work_year,
+                        num_reg_cars.year,
+                        absolute_num,
+                        num_reg_cars.cur_reg
+                    FROM 
+                        (SELECT EXTRACT(years FROM DATE_TRUNC('YEAR',date_work)) AS work_year, COUNT(*) AS absolute_num
+                        FROM maintenance
+                        GROUP BY (work_year)
+                        ORDER BY(work_year)) AS absolute_num
+                    FULL OUTER JOIN 
+                        (SELECT 
+                            CASE WHEN  num_works_reg_cars.year IS NULL
+                            THEN num_reg_cars.year
+                            ELSE num_works_reg_cars.year
+                            END AS year,
+                            cur_reg
+                        FROM
+                            (SELECT EXTRACT(years FROM DATE_TRUNC('YEAR',date_work)) AS year,COUNT(*) AS num_reg_works
+                            FROM 
+                                maintenance
+                            LEFT OUTER JOIN 
+                                (SELECT gnz,date$reg_certif FROM vehicle) as date_reg
+                            ON (maintenance.gnz = date_reg.gnz)
+                            LEFT OUTER JOIN 
+                                (SELECT DISTINCT ON (gnz) gnz, date_work AS sale_work
+                                FROM 
+                                    (SELECT * FROM maintenance
+                                        INNER JOIN maintenancetype USING(mt_id)
+                                    ORDER BY(date_work)) AS maint
+                                WHERE maint.name SIMILAR TO '%Предпродажная подготовка%') AS sale_works
+                            ON (maintenance.gnz = sale_works.gnz)
+                            WHERE date_work BETWEEN date$reg_certif AND sale_work
+                                OR sale_work IS NULL
+                            GROUP BY(year)
+                            ORDER BY (year)) AS num_works_reg_cars
+                        FULL OUTER JOIN 
+                            (SELECT 
+                                year,
+                                SUM(prirost) OVER (ORDER BY year) AS cur_reg
+                            FROM
+                                (SELECT 
+                                CASE WHEN year_reg IS NULL
+                                    THEN year_unreg
+                                ELSE year_reg
+                                END AS year,
+                                num_reg,num_unreg,
+                                CASE 
+                                    WHEN num_unreg IS NULL
+                                        THEN num_reg
+                                    WHEN num_reg IS NULL
+                                        THEN -num_unreg
+                                    ELSE num_reg - num_unreg
+                                    END AS prirost
+                                FROM 
+                                    (SELECT year_reg,
+                                    num_reg
+                                    FROM 
+                                        (SELECT 
+                                            EXTRACT(years FROM DATE_TRUNC('YEAR',date$reg_certif)) AS year_reg,
+                                            COUNT(*) AS num_reg 
+                                        FROM vehicle
+                                        GROUP BY(year_reg)
+                                        ORDER BY(year_reg)) AS res) AS reg_cars
+                                FULL OUTER JOIN
+                                    (SELECT COUNT(*) AS num_unreg, year_unreg
+                                        FROM 
+                                        (SELECT DISTINCT ON (gnz) EXTRACT(years FROM DATE_TRUNC('YEAR',date_work)) AS year_unreg,gnz
+                                        FROM 
+                                            (SELECT * FROM maintenance
+                                                INNER JOIN maintenancetype USING(mt_id)
+                                            ORDER BY(date_work)) AS maint
+                                        WHERE maint.name SIMILAR TO '%Предпродажная подготовка%') AS sale_work
+                                    GROUP BY(year_unreg)
+                                    ORDER BY(year_unreg)) AS unreg_cars
+                                ON (unreg_cars.year_unreg = reg_cars.year_reg)) AS cur_reg) AS num_reg_cars
+                        ON (num_reg_cars.year = num_works_reg_cars.year)) AS num_reg_cars
+                    ON (absolute_num.work_year = num_reg_cars.year)
+                    ORDER BY(num_reg_cars.year)) AS res
+                ORDER BY(year)) AS res1) AS res2
+        WHERE absolute_num IS NOT NULL) AS lost_profit_table
+    ON (absolute_num.year = lost_profit_table.year);
+
+
+	
+
+87. 	SELECT 
+		zero_to_six.name,
+		zero_to_six,
+		seven_to_ten,
+		ten_to_thirteen,
+		fourteen_to_eighteen,
+		older_eighteen
+	FROM 
+		(SELECT name,(((num::float/(SELECT COUNT(*) FROM vehicle)::float)*100)::numeric(15,2)|| ' %') AS zero_to_six
+		FROM 
+			(SELECT brand.name AS name,COUNT(*) as num
+			FROM vehicle
+				INNER JOIN brand USING(idb)
+			WHERE 
+				EXTRACT(years FROM DATE_TRUNC('YEAR',AGE(current_date,date_made))) BETWEEN 0 AND 6
+			GROUP BY (brand.name))as res) AS zero_to_six
+	FULL OUTER JOIN
+		(SELECT name,(((num::float/(SELECT COUNT(*) FROM vehicle)::float)*100)::numeric(15,2)|| ' %') AS seven_to_ten
+		FROM 
+			(SELECT brand.name AS name,COUNT(*) as num
+			FROM vehicle
+				INNER JOIN brand USING(idb)
+			WHERE 
+				EXTRACT(years FROM DATE_TRUNC('YEAR',AGE(current_date,date_made))) BETWEEN 7 AND 10
+			GROUP BY (brand.name))as res) AS seven_to_ten
+		ON(zero_to_six.name = seven_to_ten.name)
+	FULL OUTER JOIN
+		(SELECT name,(((num::float/(SELECT COUNT(*) FROM vehicle)::float)*100)::numeric(15,2)|| ' %') AS ten_to_thirteen
+		FROM 
+			(SELECT brand.name AS name,COUNT(*) as num
+			FROM vehicle
+				INNER JOIN brand USING(idb)
+			WHERE 
+				EXTRACT(years FROM DATE_TRUNC('YEAR',AGE(current_date,date_made))) BETWEEN 11 AND 13
+			GROUP BY (brand.name))as res) AS ten_to_thirteen
+		ON(zero_to_six.name = ten_to_thirteen.name)
+	FULL OUTER JOIN
+		(SELECT name,(((num::float/(SELECT COUNT(*) FROM vehicle)::float)*100)::numeric(15,2)|| ' %') AS fourteen_to_eighteen
+		FROM 
+			(SELECT brand.name AS name,COUNT(*) as num
+			FROM vehicle
+				INNER JOIN brand USING(idb)
+			WHERE 
+				EXTRACT(years FROM DATE_TRUNC('YEAR',AGE(current_date,date_made))) BETWEEN 14 AND 18
+			GROUP BY (brand.name))as res) AS fourteen_to_eighteen
+		ON(zero_to_six.name = fourteen_to_eighteen.name)
+	FULL OUTER JOIN
+		(SELECT name,(((num::float/(SELECT COUNT(*) FROM vehicle)::float)*100)::numeric(15,2)|| ' %') AS older_eighteen
+		FROM 
+			(SELECT brand.name AS name,COUNT(*) as num
+			FROM vehicle
+				INNER JOIN brand USING(idb)
+			WHERE 
+				EXTRACT(years FROM DATE_TRUNC('YEAR',AGE(current_date,date_made))) > 18
+			GROUP BY (brand.name))as res) AS older_eighteen
+		ON(zero_to_six.name = older_eighteen.name);
+		
+		
+		
+		
+		
+		
+
+		
+		
 
 	
 
@@ -733,4 +999,5 @@
 
 
 	
+
 
