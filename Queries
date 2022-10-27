@@ -205,20 +205,18 @@
 		INNER JOIN factory USING(idf)
 		INNER JOIN maintenancetype USING(mt_id)
 	WHERE TRIM(brand.name) = 'BMW'
-	AND  maintenancetype.name SIMILAR TO '%Ремонт%';
+	AND  maintenancetype.name SIMILAR TO '%Ремонт%'
+	ORDER BY(DATE(date_work));
 	
-	(!)
-
-39.	BEGIN;
-	CREATE TEMP TABLE IF NOT EXISTS factory_copy ON COMMIT DROP AS TABLE factory;
+39.	
 	SELECT DISTINCT
 		factory.factory_name,factory.post_addr,factory.legal_addr,factory.phone
 	FROM factory
-		INNER JOIN factory_copy USING(post_addr)
+		INNER JOIN (SELECT * FROM factory) AS factory_copy USING(post_addr)
 	WHERE 
-		factory.factory_name SIMILAR TO '%ОАО АВТОВАЗ%';
+		factory.factory_name SIMILAR TO '%ОАО АВТОВАЗ%'
 		AND factory.legal_addr <> factory_copy.legal_addr;
-	COMMIT;
+	
 	
 40.	SELECT gnz,DATE(date_work),TO_CHAR(date_work::time,'HH:MI') AS time
 	FROM maintenance 
@@ -308,6 +306,8 @@
 		(run >= 500000) AND 
 		gnz <> 'c945op57';
 
+(!!!!!!!!!!!!!)
+
 52.	SELECT DISTINCT gnz 
 	FROM maintenance AS m
 	WHERE 
@@ -354,19 +354,17 @@
 			WHERE EXTRACT(YEAR FROM date_work) = '2018'
 			AND NOT EXISTS(SELECT gnz FROM maintenance WHERE EXTRACT(YEAR FROM date_work) <> '2018' AND m.gnz = gnz))AS res); 
 				
-56. 	BEGIN;
-	CREATE TEMP TABLE IF NOT EXISTS february_dates ON COMMIT DROP AS 
-		(SELECT DATE(generate_series)
-		FROM generate_series('2018-02-01'::timestamp,'2018-02-28 00:00:00'::timestamp,'1 DAY'::interval));
+56. 	
 	SELECT *
-	FROM february_dates
+	FROM 
+		(SELECT DATE(generate_series)
+		FROM generate_series('2018-02-01'::timestamp,'2018-02-28 00:00:00'::timestamp,'1 DAY'::interval)) AS february_dates
 	WHERE NOT EXISTS
 		(SELECT DATE(date_work) 
 		FROM maintenance
 		WHERE DATE(date_work) BETWEEN '2018-02-01' AND '2018-02-28' 
 		AND 	
 			february_dates.date = DATE(date_work));
-	COMMIT;
 				
 			
 57.	SELECT COUNT(*) 
@@ -383,6 +381,8 @@
 	
 60.	SELECT ROUND(CAST(AVG(EXTRACT(years FROM DATE_TRUNC('YEAR',AGE(born)))) AS numeric),2)
 	FROM mechanic; 
+
+(!)
 
 61.	SELECT
 		SUM(cost)::numeric(15,2) AS total_cost, 
@@ -415,41 +415,43 @@
 		INNER JOIN model USING(idmo)
 	GROUP BY(auto);
 		
-65.	BEGIN;
-	CREATE TEMP TABLE IF NOT EXISTS year_work_table ON COMMIT DROP AS 
+65.	
+	SELECT year
+	FROM 
 		(SELECT 
 			COUNT(*) AS num_work_days,
 			EXTRACT(year FROM date_work) as year 
 		FROM 
 			maintenance 
-		GROUP BY (year));
-	SELECT year
-	FROM year_work_table
-	WHERE num_work_days = (SELECT MAX(num_work_days) FROM year_work_table);
-	COMMIT;
+		GROUP BY (year)) AS year_work_table
+	WHERE num_work_days = (SELECT MAX(num_work_days) 
+	FROM 
+	(SELECT 
+			COUNT(*) AS num_work_days,
+			EXTRACT(year FROM date_work) as year 
+		FROM 
+			maintenance 
+		GROUP BY (year)) AS year_work_table);
+	
 
-66.	BEGIN;
-	CREATE TEMP TABLE IF NOT EXISTS mark_num ON COMMIT DROP AS 
-		(SELECT marka.name,COUNT (*) AS num
+66.	
+	SELECT * 
+	FROM 
+	(SELECT marka.name,COUNT (*) AS num
 		FROM vehicle 
 			INNER JOIN marka USING(idm)
-		GROUP BY(marka.name));
-	
-	SELECT * 
-	FROM mark_num
+		GROUP BY(marka.name)) AS mark_num
 	WHERE num>=8
 	AND TRIM(name) <> '';
-	COMMIT;
 	
-67.	BEGIN;
-	CREATE TEMP TABLE IF NOT EXISTS gnz_num ON COMMIT DROP AS 
-		(SELECT	gnz,COUNT (*) AS num
-		FROM maintenance
-		GROUP BY(gnz));
+	
+67.
 	SELECT gnz
-	FROM gnz_num
+	FROM (SELECT gnz,COUNT (*) AS num
+		FROM maintenance
+		GROUP BY(gnz)) AS gnz_num
 	WHERE num = 1;
-	COMMIT;
+
 	
 68.	SELECT gnz,state.name,factory.factory_name,factory.legal_addr,factory.phone
 	FROM
@@ -467,17 +469,22 @@
 	WHERE 
 		maintenancetype.name SIMILAR TO '%Предпродажная подготовка%';
 		
-70.	BEGIN;
-	CREATE TEMP TABLE IF NOT EXISTS cost_brand ON COMMIT DROP AS 
+70.	
+	SELECT name
+	FROM 
+	(SELECT brand.name,SUM(cost) AS cost
+		FROM
+			vehicle
+			INNER JOIN brand USING(idb)
+		GROUP BY(brand.name)) AS cost_brand 
+	WHERE cost = 
+	(SELECT MAX(cost) 
+	FROM 
 		(SELECT brand.name,SUM(cost) AS cost
 		FROM
 			vehicle
 			INNER JOIN brand USING(idb)
-		GROUP BY(brand.name));
-	SELECT name
-	FROM cost_brand 
-	WHERE cost = (SELECT MAX(cost) FROM cost_brand);
-	COMMIT;
+		GROUP BY(brand.name)) AS cost_brand);
 	
 
 71. 	SELECT num_of_bus
@@ -523,8 +530,9 @@
 	WHERE post_o_legal_addr <> '';
 		
 	
-74.	BEGIN;
-	CREATE TEMP TABLE IF NOT EXISTS brand_remont_2018 ON COMMIT DROP AS 
+74.	
+	SELECT name,num_rem
+	FROM 
 		(SELECT brand.name,COUNT(*) AS num_rem
 		FROM maintenance
 			INNER JOIN brand USING(idb)
@@ -533,35 +541,41 @@
 			TRIM(maintenancetype.name) = 'Ремонт'
 		AND 
 			EXTRACT(YEAR FROM date_work) = '2018'
-		GROUP BY(brand.name));
-	SELECT name
-	FROM brand_remont_2018 
-	WHERE num_rem = (SELECT MIN(num_rem) FROM brand_remont_2018);
-	COMMIT;
+		GROUP BY(brand.name)) AS brand_remont_2018 
+	WHERE num_rem = 
+	(SELECT MIN(num_rem) 
+	FROM 
+		(SELECT brand.name,COUNT(*) AS num_rem
+		FROM maintenance
+			INNER JOIN brand USING(idb)
+			INNER JOIN maintenancetype USING (mt_id)
+		WHERE 
+			TRIM(maintenancetype.name) = 'Ремонт'
+		AND 
+			EXTRACT(YEAR FROM date_work) = '2018'
+		GROUP BY(brand.name)) AS brand_remont_2018 );
+
 	
-75.	BEGIN;
-	CREATE TEMP TABLE IF NOT EXISTS mech_work ON COMMIT DROP AS 
+75.	
+	SELECT sname_initials
+	FROM 
+	(SELECT sname_initials,COUNT(*) AS work_num
+		FROM maintenance 
+			INNER JOIN mechanic USING(id_mech)
+		GROUP BY(sname_initials)) AS mech_work 
+	WHERE work_num > 
+	(SELECT work_num 
+	FROM 
 		(SELECT sname_initials,COUNT(*) AS work_num
 		FROM maintenance 
 			INNER JOIN mechanic USING(id_mech)
-		GROUP BY(sname_initials));
-	SELECT sname_initials
-	FROM mech_work 
-	WHERE work_num > (SELECT work_num FROM mech_work WHERE sname_initials = 'Голубев Д.Н.');
-	COMMIT;
+		GROUP BY(sname_initials)) AS mech_work 
+	WHERE sname_initials = 'Голубев Д.Н.');
+	
 	
 	(!)
 	
-76.	BEGIN;
-	CREATE TEMP TABLE IF NOT EXISTS vehicle_copy ON COMMIT DROP AS
-		(SELECT gnz,
-			COALESCE(brand.name,'') || ' ' || COALESCE(marka.name,'') || ' ' || COALESCE(model_name,'') AS bmm,
-			vehicle.date$reg_certif
-		FROM vehicle
-			INNER JOIN brand USING(idb)
-			INNER JOIN marka USING(idm)
-			INNER JOIN model USING (idmo));
-	
+76.	
 	SELECT 
 		vehicle.gnz || ' ' || vehicle_copy.gnz,
 		vehicle.bmm || ' | ' || vehicle_copy.bmm,
@@ -574,10 +588,17 @@
 			INNER JOIN brand USING(idb)
 			INNER JOIN marka USING(idm)
 			INNER JOIN model USING (idmo)) AS vehicle
-		INNER JOIN vehicle_copy USING(date$reg_certif)
+		INNER JOIN 
+		(SELECT gnz,
+			COALESCE(brand.name,'') || ' ' || COALESCE(marka.name,'') || ' ' || COALESCE(model_name,'') AS bmm,
+			vehicle.date$reg_certif
+		FROM vehicle
+			INNER JOIN brand USING(idb)
+			INNER JOIN marka USING(idm)
+			INNER JOIN model USING (idmo)) AS vehicle_copy
+		USING(date$reg_certif)
 	WHERE vehicle.gnz <> vehicle_copy.gnz;
-	COMMIT;
-	
+
 77.	SELECT gnz,ser$reg_certif,num$reg_certif,date$reg_certif,
 		CASE 
 		WHEN EXISTS
@@ -733,7 +754,7 @@
 		FROM maintenance
 		GROUP BY (year)
 		ORDER BY(year)) AS absolute_num
-   	LEFT OUTER JOIN 
+    LEFT OUTER JOIN 
         (SELECT year,
         (num_reg_works::float/cars_reg::float)::numeric(15,2) AS "works on one reg vehicle"
         FROM
@@ -977,10 +998,148 @@
 				EXTRACT(years FROM DATE_TRUNC('YEAR',AGE(current_date,date_made))) > 18
 			GROUP BY (brand.name))as res) AS older_eighteen
 		ON(zero_to_six.name = older_eighteen.name);
+
+88.
+
+SELECT *
+FROM
+    (SELECT factory_name AS factory_with_most_cars_remont,num_rem
+    FROM
+        (SELECT factory_name,COUNT(*) AS num_rem
+        FROM maintenance
+            INNER JOIN factory USING(idf)
+            INNER JOIN maintenancetype USING(mt_id)
+        WHERE maintenancetype.name SIMILAR TO '%Ремонт%'
+        GROUP BY(factory_name)) AS factory_rem
+    WHERE num_rem = 
+        (SELECT MAX(num_rem)
+        FROM 
+            (SELECT factory_name,COUNT(*) AS num_rem
+            FROM maintenance
+                INNER JOIN factory USING(idf)
+                INNER JOIN maintenancetype USING(mt_id)
+            WHERE maintenancetype.name SIMILAR TO '%Ремонт%'
+            GROUP BY(factory_name))AS factory_rem)) AS res1
+CROSS JOIN
+    (SELECT factory_name AS factory_with_max_rem_to_cars_realtion,rem_to_car
+    FROM 
+        (SELECT factory_name,num_rem::float/num_cars::float AS rem_to_car
+        FROM
+            (SELECT factory_name,COUNT(*) AS num_cars
+            FROM vehicle
+                INNER JOIN factory USING(idf)
+            GROUP BY(factory_name)) AS cars_f
+        INNER JOIN 
+            (SELECT factory_name,COUNT(*) AS num_rem
+            FROM maintenance
+                INNER JOIN factory USING(idf)
+                INNER JOIN maintenancetype USING(mt_id)
+            WHERE maintenancetype.name SIMILAR TO '%Ремонт%'
+            GROUP BY(factory_name)) AS factory_rem
+        USING(factory_name)) AS res
+    WHERE rem_to_car = 
+        (SELECT MAX(rem_to_car)
+        FROM 
+            (SELECT factory_name,num_rem::float/num_cars::float AS rem_to_car
+        FROM
+            (SELECT factory_name,COUNT(*) AS num_cars
+            FROM vehicle
+                INNER JOIN factory USING(idf)
+            GROUP BY(factory_name)) AS cars_f
+        INNER JOIN 
+            (SELECT factory_name,COUNT(*) AS num_rem
+            FROM maintenance
+                INNER JOIN factory USING(idf)
+                INNER JOIN maintenancetype USING(mt_id)
+            WHERE maintenancetype.name SIMILAR TO '%Ремонт%'
+            GROUP BY(factory_name)) AS factory_rem
+        USING(factory_name)) AS res)) AS res2;
 		
 		
 		
-		
+89.
+
+    SELECT 
+        vehicle.gnz,
+        COALESCE(brand.name,'') || ' ' || COALESCE(marka.name,'') || ' ' || COALESCE(model_name,'') AS bmm,
+        date$reg_certif,
+        first_rem,
+        EXTRACT('days' FROM DATE_TRUNC('day',first_rem-date$reg_certif)) AS days_before_rem
+    FROM vehicle
+        LEFT OUTER JOIN
+        (SELECT DISTINCT
+            gnz,
+            FIRST_VALUE(remont_date) OVER (PARTITION BY gnz ORDER BY remont_date) AS first_rem
+        FROM
+            (SELECT 
+            gnz,date_work AS remont_date
+            FROM maintenance
+                INNER JOIN maintenancetype USING(mt_id)
+            WHERE maintenancetype.name SIMILAR TO '%Ремонт%'
+            ORDER BY gnz,date_work) AS rem) AS first_rem_table
+        ON (vehicle.gnz = first_rem_table.gnz)
+        INNER JOIN brand USING(idb)
+        INNER JOIN marka USING(idm)
+        INNER JOIN model USING (idmo)
+    WHERE AGE(first_rem,date$reg_certif) < '1 year';
+
+
+90.
+
+SELECT 
+    maint.gnz,
+    date_work,
+    sname_initials
+FROM maintenance AS maint
+    INNER JOIN mechanic USING(id_mech)
+WHERE EXISTS
+    (SELECT 
+        gnz,year
+    FROM
+        (SELECT
+                gnz,
+                year,
+                COUNT(*) AS works,
+                COUNT(DISTINCT sname_initials) AS mech
+            FROM
+                (SELECT 
+                    gnz,
+                    date_work,
+                    EXTRACT('years' FROM date_work) AS year,
+                    sname_initials
+                FROM maintenance
+                    INNER JOIN mechanic USING(id_mech)
+                    INNER JOIN maintenancetype USING(mt_id)
+                WHERE maintenancetype.name NOT SIMILAR TO '%Предпродажная подготовка%'
+                ORDER BY(gnz,date_work)) AS year_mech
+            GROUP BY(gnz,year))AS res
+        WHERE mech>=works
+    AND res.gnz = maint.gnz 
+    AND res.year = EXTRACT('years' FROM maint.date_work))
+ORDER BY(gnz,date_work);
+
+
+91.
+
+SELECT *
+FROM
+    (SELECT 
+        ROUND((SUM(cost * num_costs)::float/(SELECT COUNT(*) FROM vehicle)::float)) AS mediana
+    FROM
+        (SELECT cost,COUNT(cost) AS num_costs
+        FROM vehicle
+        GROUP BY(cost)
+        ORDER BY(cost)) AS costs) AS mediana
+    CROSS JOIN
+    (SELECT ROUND(SQRT((SUM(cost2 * num_costs)::float/(SELECT COUNT(*) FROM vehicle)::float) - (SUM(sqrt(cost2) * num_costs)::float/(SELECT COUNT(*) FROM vehicle)::float)^2)) AS razbros
+    FROM
+        (SELECT cost::float*cost::float AS cost2,COUNT(cost) AS num_costs
+        FROM vehicle
+        GROUP BY(cost::float*cost::float)
+        ORDER BY(cost::float*cost::float)) AS costs) AS razbros;
+
+
+	
 		
 		
 
